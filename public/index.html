@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Language Words Study</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+        }
+
+        h1 {
+            background-color: #6a0dad;
+            color: white;
+            width: 100%;
+            text-align: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        #level-select, #load-words {
+            margin-top: 20px;
+            padding: 10px;
+            font-size: 16px;
+            display: inline-block;
+        }
+
+        #word-display {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        #current-word {
+            font-size: 48px;
+            color: #6a0dad;
+            margin: 20px 0;
+        }
+
+        #show-meaning, #correct, #fail {
+            background-color: #6a0dad;
+            color: white;
+            border: none;
+            padding: 10px;
+            font-size: 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 96%;
+        }
+
+        #correct, #fail {
+            width: 48%;
+        }
+
+        #fail {
+            background-color: #ff4b4b;
+        }
+
+
+        #show-meaning:hover, #correct:hover, #fail:hover {
+            background-color: #4b0082;
+        }
+
+        #fail:hover {
+            background-color: #be3737;
+        }
+
+        #current-meanings, #current-readings {
+            background-color: #dff0d8;
+            color: #3c763d;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 20px;
+            width:45%;
+            vertical-align:top;
+            font-size: 24px;
+        }
+
+        #current-readings {
+            background-color: #d8e9f0;
+            color: #3c4a76;
+        }
+
+        #answers {
+            margin-top: 10px;
+        }
+
+        #progress {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>WaniKani review</h1>
+    <div>
+        <label for="level-select">Select Level:</label>
+        <select id="level-select">
+        <!-- Options will be populated by JavaScript -->
+        </select>
+        <button id="load-words">Load Words</button>
+    </div>
+    
+    
+    <div id="word-display">
+        <p id="progress"></p>
+        <p id="current-word">No word loaded</p>
+        <button id="show-meaning" style="display:none;">Reveal</button>
+        <div>
+            <button id="correct" style="display:none;">Correct</button>
+            <button id="fail" style="display:none;">Fail</button>
+        </div>
+        <div>
+            <p id="current-meanings" style="display:none;"></p>
+            <p id="current-readings" style="display:none;"></p>
+        </div>
+        <p id="link" style="display:none;"></p>
+        <p id="answers" style="display:none;"></p>
+        
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const levelSelect = document.getElementById('level-select');
+            const loadWordsBtn = document.getElementById('load-words');
+            const wordDisplay = document.getElementById('word-display');
+            const currentWordEl = document.getElementById('current-word');
+            const showMeaningBtn = document.getElementById('show-meaning');
+            const currentMeaningsEl = document.getElementById('current-meanings');
+            const currentReadingsEl = document.getElementById('current-readings');
+            const linkEl = document.getElementById('link');
+            const answersEl = document.getElementById('answers');
+            const correctBtn = document.getElementById('correct');
+            const failBtn = document.getElementById('fail');
+            const progressEl = document.getElementById('progress');
+
+            let words = [];
+            let currentWordIndex = 0;
+            let currentLevel = 1;
+
+            // Populate level options
+            for (let i = 1; i <= 60; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `Level ${i}`;
+                levelSelect.appendChild(option);
+            }
+
+            loadWordsBtn.addEventListener('click', async () => {
+                currentLevel = levelSelect.value;
+                if (currentLevel) {
+                    try {
+                        const response = await fetch(`/api/words/${currentLevel}`);
+                        words = await response.json();
+                        shuffle(words);  // Shuffle the words array
+                        currentWordIndex = 0;
+                        showWord();
+                        showMeaningBtn.style.display = 'inline-block';
+                        correctBtn.style.display = 'none';
+                        failBtn.style.display = 'none';
+                        updateProgress();
+                    } catch (error) {
+                        currentWordEl.textContent = 'Failed to load words';
+                        showMeaningBtn.style.display = 'none';
+                        currentMeaningsEl.style.display = 'none';
+                        currentReadingsEl.style.display = 'none';
+                        linkEl.style.display = 'none';
+                        answersEl.style.display = 'none';
+                        correctBtn.style.display = 'none';
+                        failBtn.style.display = 'none';
+                        progressEl.textContent = '';
+                    }
+                }
+            });
+
+            showMeaningBtn.addEventListener('click', () => {
+                showMeaning();
+            });
+
+            correctBtn.addEventListener('click', () => {
+                updateAnswerAndMoveNext(true);
+            });
+
+            failBtn.addEventListener('click', () => {
+                updateAnswerAndMoveNext(false);
+            });
+
+            async function showWord() {
+                const wordObj = words[currentWordIndex];
+                currentWordEl.textContent = wordObj.word;
+            }
+
+            async function showMeaning() {
+                const wordObj = words[currentWordIndex];
+                try {
+                    const response = await fetch(`/api/meanings/${wordObj.word}`);
+                    const data = await response.json();
+                    const meanings = data.meanings.map(m => m.meaning).join('<br>');
+                    const readings = data.readings.map(r => r.reading).join('<br>');
+                    const wordLink = data.document_url
+
+                    currentMeaningsEl.innerHTML = `${meanings}`;
+                    currentReadingsEl.innerHTML = `${readings}`;
+                    linkEl.innerHTML = `<a href="${wordLink}">WaniKani link</a><br>`
+                    answersEl.textContent = `Answers: ${wordObj.answers.join(', ')}`;
+
+                    currentMeaningsEl.style.display = 'inline-block';
+                    currentReadingsEl.style.display = 'inline-block';
+                    linkEl.style.display = 'block';
+                    answersEl.style.display = 'block';
+                    correctBtn.style.display = 'inline-block';
+                    failBtn.style.display = 'inline-block';
+                    showMeaningBtn.style.display = 'none';
+                } catch (error) {
+                    currentMeaningsEl.textContent = 'Failed to load meanings';
+                    currentReadingsEl.style.display = 'none';
+                    currentMeaningsEl.style.display = 'block';
+                    linkEl.style.display = 'none';
+                    answersEl.style.display = 'none';
+                    correctBtn.style.display = 'none';
+                    failBtn.style.display = 'none';
+                }
+            }
+
+            async function updateAnswerAndMoveNext(isCorrect) {
+                const wordObj = words[currentWordIndex];
+                const response = await fetch('/api/update-answers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        level: currentLevel,
+                        word: wordObj.word,
+                        isCorrect
+                    })
+                });
+
+                if (response.ok) {
+                    wordObj.answers.push(isCorrect ? 1 : 0);
+                    answersEl.textContent = `Answers: ${wordObj.answers.join(', ')}`;
+                    if (currentWordIndex < words.length - 1) {
+                        currentWordIndex++;
+                        showWord();
+                        showMeaningBtn.style.display = 'inline-block';
+                        currentMeaningsEl.style.display = 'none';
+                        currentReadingsEl.style.display = 'none';
+                        linkEl.style.display = 'none';
+                        answersEl.style.display = 'none';
+                        correctBtn.style.display = 'none';
+                        failBtn.style.display = 'none';
+                        updateProgress();
+                    } else {
+                        currentWordEl.textContent = 'No more words';
+                        currentMeaningsEl.textContent = '';
+                        currentReadingsEl.textContent = '';
+                        linkEl.style.display = 'none';
+                        answersEl.textContent = '';
+                        showMeaningBtn.style.display = 'none';
+                        correctBtn.style.display = 'none';
+                        failBtn.style.display = 'none';
+                        progressEl.textContent = '';
+                    }
+                } else {
+                    console.error('Failed to update answer');
+                }
+            }
+
+            function shuffle(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
+            function updateProgress() {
+                progressEl.textContent = `Words left: ${words.length - currentWordIndex} / ${words.length}`;
+            }
+        });
+    </script>
+</body>
+</html>
